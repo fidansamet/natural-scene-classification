@@ -91,6 +91,7 @@ class DataLoader:
                 self.vgg19_test_read = True
                 self.vgg19_test_iter = iter(np.loadtxt(VGG19_PATH + data + '.txt', dtype=np.float32))
         else:
+            open(VGG19_PATH + data + '.txt', 'w')
             self.vgg19 = VGG19()
             if data == 'train':
                 self.vgg19_train_read = False
@@ -123,7 +124,6 @@ class DataLoader:
         return vgg19_extracted
 
     def save_vgg_features(self, data):
-        open(VGG19_PATH + data + '.txt', 'w')
         if data == 'train' and not self.vgg19_train_read:
             np.savetxt(VGG19_PATH + 'train.txt', self.vgg19_train_features, fmt='%f')
         elif data == 'valid' and not self.vgg19_valid_read:
