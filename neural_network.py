@@ -1,21 +1,37 @@
+import ast
+import math
 import numpy as np
 
 
 class NeuralNetwork:
-    def __init__(self, hidden_sizes, activation_func, error_func, lr, input_size=900, output_size=6, scale=1e-2):
-        self.layer_num = len(hidden_sizes) + 1
-        self.activation_func = activation_func
-        self.error_func = error_func
-        self.lr = lr
-        self.output_size = output_size
+    def __init__(self, hidden_sizes=None, activation_func=None, error_func=None, lr=None, model_name=None,
+                 model_import=False, input_size=900, output_size=6):
         self.net = {}
+        self.model_name = model_name
 
+        if model_import:
+            self.import_model()
+        else:
+            self.layer_num = len(hidden_sizes) + 1
+            self.activation_func = activation_func
+            self.error_func = error_func
+            self.lr = lr
+            self.output_size = output_size
+            self.net = {}
+            self.init_weights(input_size, hidden_sizes, output_size)
+
+    def init_weights(self, input_size, hidden_sizes, output_size, scale=1e-2):
         # get all dimensions in the network
-        net_sizes = np.concatenate((input_size, hidden_sizes, output_size), axis=None)
+        net_sizes = np.concatenate((input_size, hidden_sizes, output_size), axis=None).astype(int)
 
         for i in range(self.layer_num):
-            self.net['w_' + str(i + 1)] = scale * np.random.randn(net_sizes[i], net_sizes[i + 1])
-            self.net['b_' + str(i + 1)] = np.zeros(net_sizes[i + 1])
+            # TODO
+            # self.net['w_' + str(i + 1)] = scale * np.random.randn(net_sizes[i], net_sizes[i + 1])
+            # self.net['b_' + str(i + 1)] = np.zeros(net_sizes[i + 1])
+
+            stdv = 1. / math.sqrt(net_sizes[i])
+            self.net['w_' + str(i + 1)] = np.random.uniform(-stdv, stdv, (net_sizes[i], net_sizes[i + 1]))
+            self.net['b_' + str(i + 1)] = np.random.uniform(-stdv, stdv, net_sizes[i + 1])
 
     # Activation functions - Start
     def sigmoid(self, z):
@@ -31,9 +47,11 @@ class NeuralNetwork:
     # Activation functions and derivatives - End
 
     # Activation functions derivatives - Start
+    # TODO
     def d_sigmoid(self, z):
         return z * (1 - z)
 
+    # TODO
     def d_tanh(self, z):
         return 1 - z ** 2
 
@@ -53,12 +71,21 @@ class NeuralNetwork:
         log_probs, probs = self.softmax(z)
         N = z.shape[0]
         loss = -np.sum(log_probs[np.arange(N), y]) / N
-        probs[np.arange(N), y] -= 1
-        probs /= N
-        return loss, probs
+        d_x = probs.copy()
+        d_x[np.arange(N), y] -= 1
+        d_x /= N
+        return loss, d_x
+
+    # TODO
+    def mean_sum_squared_err(self, z, y):
+        log_probs, probs = self.softmax(z)
+        n = z.shape[0]
+        loss = np.sum(np.power((1 - log_probs[np.arange(n), y]), 2)) / n
+        d_x = -1 * (2 * (1 - probs[np.arange(n), y])) / n
+        return loss, d_x
 
     # Forward - Start
-    def forward_pass(self, X):
+    def forward_pass(self, X, valid=False):
         inputs = X
         self.caches = []
 
@@ -66,8 +93,9 @@ class NeuralNetwork:
             inputs, cache = self.activated_forward(inputs, self.net['w_' + str(i + 1)], self.net['b_' + str(i + 1)])
             self.caches.append(cache)
 
-        scores, cache = self.forward(inputs, self.net['w_' + str(i + 2)], self.net['b_' + str(i + 2)])
-        self.caches.append(cache)
+        scores, cache = self.forward(inputs, self.net['w_' + str(self.layer_num)], self.net['b_' + str(self.layer_num)])
+        if not valid:
+            self.caches.append(cache)
         return scores
 
     def forward(self, x, w, b):
@@ -148,4 +176,15 @@ class NeuralNetwork:
         return loss, gradients
 
     def predict(self, X):
-        return self.forward_pass(X)
+        return self.forward_pass(X, valid=True)
+
+    def extract_model(self):
+        model_file = open(self.model_name, 'a')
+        model_file.write(str(self.net))
+        model_file.close()
+
+    def import_model(self):
+        model_file = open(self.model_name, "r")
+        contents = model_file.read()
+        self.net = ast.literal_eval(contents)
+        model_file.close()
