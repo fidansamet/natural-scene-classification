@@ -5,7 +5,7 @@ import numpy as np
 
 class NeuralNetwork:
     def __init__(self, hidden_sizes=None, activation_func=None, error_func=None, lr=None, model_name=None,
-                 model_import=False, input_size=900, output_size=6):
+                 model_import=False, input_size=None, output_size=6):
         self.net = {}
         self.model_name = model_name
 
@@ -20,15 +20,11 @@ class NeuralNetwork:
             self.net = {}
             self.init_weights(input_size, hidden_sizes, output_size)
 
-    def init_weights(self, input_size, hidden_sizes, output_size, scale=1e-2):
+    def init_weights(self, input_size, hidden_sizes, output_size):
         # get all dimensions in the network
         net_sizes = np.concatenate((input_size, hidden_sizes, output_size), axis=None).astype(int)
 
         for i in range(self.layer_num):
-            # TODO
-            # self.net['w_' + str(i + 1)] = scale * np.random.randn(net_sizes[i], net_sizes[i + 1])
-            # self.net['b_' + str(i + 1)] = np.zeros(net_sizes[i + 1])
-
             stdv = 1. / math.sqrt(net_sizes[i])
             self.net['w_' + str(i + 1)] = np.random.uniform(-stdv, stdv, (net_sizes[i], net_sizes[i + 1]))
             self.net['b_' + str(i + 1)] = np.random.uniform(-stdv, stdv, net_sizes[i + 1])

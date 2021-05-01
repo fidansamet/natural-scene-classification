@@ -46,7 +46,9 @@ if __name__ == '__main__':
     data_loader = DataLoader(opt)
     data_loader.load_train_and_valid()
     hidden_sizes = [opt.hidden_unit_num for i in range(opt.hidden_layer_num)]
-    nn = NeuralNetwork(hidden_sizes=hidden_sizes, activation_func=opt.activation_func, error_func=opt.objective_func, lr=opt.learning_rate)
+    input_size = 4098 if opt.vgg19 else 900
+    nn = NeuralNetwork(hidden_sizes=hidden_sizes, activation_func=opt.activation_func, error_func=opt.objective_func,
+                       lr=opt.learning_rate, input_size=input_size)
 
     X_train, y_train = data_loader.X_train, data_loader.y_train
     X_valid, y_valid = data_loader.X_valid, data_loader.y_valid
@@ -66,8 +68,8 @@ if __name__ == '__main__':
             loss = mini_batch_gd(start_idx, end_idx)
             # print('Iteration %d in Epoch %d - Loss: %f' % (i+1, epoch+1, loss))
 
-        # if (epoch+1) % 30 == 0:
-        nn.lr *= lr_decay
+        if opt.reduce_lr:
+            nn.lr *= lr_decay
 
         train_acc = validate(X_train, y_train)
         train_acc_cache.append(train_acc)
