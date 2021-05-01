@@ -22,40 +22,39 @@ class NeuralNetwork:
 
     def init_weights(self, input_size, hidden_sizes, output_size):
         # get all dimensions in the network
-        net_sizes = np.concatenate((input_size, hidden_sizes, output_size), axis=None).astype(int)
+        layer_sizes = np.concatenate((input_size, hidden_sizes, output_size), axis=None).astype(int)
 
         for i in range(self.layer_num):
-            stdv = 1. / math.sqrt(net_sizes[i])
-            self.net['w_' + str(i + 1)] = np.random.uniform(-stdv, stdv, (net_sizes[i], net_sizes[i + 1]))
-            self.net['b_' + str(i + 1)] = np.random.uniform(-stdv, stdv, net_sizes[i + 1])
+            stdv = 1. / math.sqrt(layer_sizes[i])
+            self.net['w_' + str(i + 1)] = np.random.uniform(-stdv, stdv, (layer_sizes[i], layer_sizes[i + 1])).astype(
+                'float32')
+            self.net['b_' + str(i + 1)] = np.random.uniform(-stdv, stdv, layer_sizes[i + 1]).astype('float32')
 
     # Activation functions - Start
     def sigmoid(self, z):
-        return 1 / (1 + np.exp(-z))
+        return (1 / (1 + np.exp(-z))).astype('float32')
 
     def tanh(self, z):
-        return np.tanh(z)
+        return np.tanh(z).astype('float32')
         # return (np.exp(z) - np.exp(-z)) / (np.exp(z) + np.exp(-z))
 
     def relu(self, z):
-        return np.maximum(0, z)
+        return np.maximum(0, z).astype('float32')
 
     # Activation functions and derivatives - End
 
     # Activation functions derivatives - Start
-    # TODO
-    def d_sigmoid(self, z):
-        return z * (1 - z)
 
-    # TODO
-    def d_tanh(self, z):
-        return 1 - z ** 2
+    def d_sigmoid(self, a):
+        return a * (1 - a)
 
-    def d_relu(self, x, z):
-        return (z > 0) * x
+    def d_tanh(self, a):
+        return 1 - a ** 2
+
+    def d_relu(self, z):
+        return z > 0
 
     # Activation functions derivatives - End
-
     def softmax(self, z):
         shifted = z - np.max(z, axis=1, keepdims=True)
         z = np.sum(np.exp(shifted), axis=1, keepdims=True)
@@ -65,19 +64,29 @@ class NeuralNetwork:
 
     def sum_neg_log_likelihood(self, z, y):
         log_probs, probs = self.softmax(z)
-        N = z.shape[0]
-        loss = -np.sum(log_probs[np.arange(N), y]) / N
+        n = z.shape[0]
+        loss = -np.sum(log_probs[np.arange(n), y]) / n
         d_x = probs.copy()
-        d_x[np.arange(N), y] -= 1
-        d_x /= N
+        d_x[np.arange(n), y] -= 1
+        d_x /= n
         return loss, d_x
 
-    # TODO
-    def mean_sum_squared_err(self, z, y):
-        log_probs, probs = self.softmax(z)
+    def mean_squared_err(self, z, y):
+        _, probs = self.softmax(z)
         n = z.shape[0]
-        loss = np.sum(np.power((1 - log_probs[np.arange(n), y]), 2)) / n
-        d_x = -1 * (2 * (1 - probs[np.arange(n), y])) / n
+        one_hot_y = np.zeros((n, self.output_size), dtype='float32')
+        one_hot_y[np.arange(n), y] = 1.
+        loss = np.sum(np.power(one_hot_y - probs, 2)) / n
+        d_x = -2 * (one_hot_y - probs) / n
+        return loss, d_x
+
+    def sum_squared_err(self, z, y):
+        _, probs = self.softmax(z)
+        n = z.shape[0]
+        one_hot_y = np.zeros((n, self.output_size), dtype='float32')
+        one_hot_y[np.arange(n), y] = 1.
+        loss = np.sum(np.power(one_hot_y - probs, 2))
+        d_x = -2 * (one_hot_y - probs)
         return loss, d_x
 
     # Forward - Start
@@ -106,22 +115,24 @@ class NeuralNetwork:
             activated = self.tanh(z)
         elif self.activation_func == 'relu':
             activated = self.relu(z)
-        cache = z
-        return activated, cache
+        return activated
 
     def activated_forward(self, x, w, b):
         z, fwd_cache = self.forward(x, w, b)
-        activated, a_cache = self.activate(z)
-        cache = (fwd_cache, a_cache)
-        # 2nd arg cache?
-        return activated, cache
+        activated = self.activate(z)
+        return activated, (fwd_cache, z, activated)
 
     # Forward - End
 
     # Backward - Start
     def backward_pass(self, scores, y):
         gradients = {}
-        loss, d_o = self.sum_neg_log_likelihood(scores, y)
+        if self.error_func == 'log':
+            loss, d_o = self.sum_neg_log_likelihood(scores, y)
+        elif self.error_func == 'sse':
+            loss, d_o = self.sum_squared_err(scores, y)
+        elif self.error_func == 'mse':
+            loss, d_o = self.mean_squared_err(scores, y)
 
         d_o, d_w, d_b = self.backward(d_o, self.caches.pop())
         gradients['w_' + str(self.layer_num)] = d_w
@@ -141,18 +152,18 @@ class NeuralNetwork:
         d_b = np.sum(d_o, axis=0)
         return d_x, d_w, d_b
 
-    def d_activate(self, d_o, x):
+    def d_activate(self, d_o, z, a):
         if self.activation_func == 'sigmoid':
-            d_x = self.d_sigmoid(x)
+            d_x = self.d_sigmoid(a)
         elif self.activation_func == 'tanh':
-            d_x = self.d_tanh(x)
+            d_x = self.d_tanh(a)
         elif self.activation_func == 'relu':
-            d_x = self.d_relu(d_o, x)
-        return d_x
+            d_x = self.d_relu(z)
+        return d_x * d_o
 
     def activated_backward(self, d_o, cache):
-        fwd_cache, a_cache = cache
-        d_a = self.d_activate(d_o, a_cache)
+        fwd_cache, z_cache, a_cache = cache
+        d_a = self.d_activate(d_o, z_cache, a_cache)
         return self.backward(d_a, fwd_cache)
 
     def update_weights(self, gradients):
