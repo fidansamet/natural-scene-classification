@@ -1,15 +1,15 @@
-import ast
 import math
+import pickle
 import numpy as np
 
 
 class NeuralNetwork:
-    def __init__(self, hidden_sizes=None, activation_func=None, error_func=None, lr=None, model_name=None,
-                 model_import=False, input_size=None, output_size=6):
+    def __init__(self, hidden_sizes=None, activation_func=None, error_func=None, lr=None, model_import=False,
+                 model_path=None, input_size=None, output_size=6):
         self.net = {}
-        self.model_name = model_name
 
         if model_import:
+            self.model_path = model_path
             self.import_model()
         else:
             self.layer_num = len(hidden_sizes) + 1
@@ -17,7 +17,6 @@ class NeuralNetwork:
             self.error_func = error_func
             self.lr = lr
             self.output_size = output_size
-            self.net = {}
             self.init_weights(input_size, hidden_sizes, output_size)
 
     def init_weights(self, input_size, hidden_sizes, output_size):
@@ -44,7 +43,6 @@ class NeuralNetwork:
     # Activation functions and derivatives - End
 
     # Activation functions derivatives - Start
-
     def d_sigmoid(self, a):
         return a * (1 - a)
 
@@ -55,6 +53,7 @@ class NeuralNetwork:
         return z > 0
 
     # Activation functions derivatives - End
+
     def softmax(self, z):
         shifted = z - np.max(z, axis=1, keepdims=True)
         z = np.sum(np.exp(shifted), axis=1, keepdims=True)
@@ -62,6 +61,7 @@ class NeuralNetwork:
         probs = np.exp(log_probs)
         return log_probs, probs
 
+    # Error functions - Start
     def sum_neg_log_likelihood(self, z, y):
         log_probs, probs = self.softmax(z)
         n = z.shape[0]
@@ -88,6 +88,8 @@ class NeuralNetwork:
         loss = np.sum(np.power(one_hot_y - probs, 2))
         d_x = -2 * (one_hot_y - probs)
         return loss, d_x
+
+    # Error functions - End
 
     # Forward - Start
     def forward_pass(self, X, valid=False):
@@ -186,12 +188,18 @@ class NeuralNetwork:
         return self.forward_pass(X, valid=True)
 
     def extract_model(self):
-        model_file = open(self.model_name, 'a')
-        model_file.write(str(self.net))
-        model_file.close()
+        name = '%dnn_lr=%0.3f_err=%s_act=%s_vgg.pkl' % (self.layer_num, self.lr, self.error_func, self.activation_func)
+        model = {
+            'layer_num': self.layer_num,
+            'activation_func': self.activation_func,
+            'net': self.net
+        }
+        model_file = open('./model/' + name, 'wb')
+        pickle.dump(model, model_file, protocol=pickle.HIGHEST_PROTOCOL)
 
     def import_model(self):
-        model_file = open(self.model_name, "r")
-        contents = model_file.read()
-        self.net = ast.literal_eval(contents)
-        model_file.close()
+        model_file = open(self.model_path, 'rb')
+        model = pickle.load(model_file)
+        self.layer_num = model['layer_num']
+        self.activation_func = model['activation_func']
+        self.net = model['net']
