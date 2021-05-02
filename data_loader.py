@@ -1,6 +1,8 @@
 import os
 import random
 import torch
+import csv
+import re
 import numpy as np
 from PIL import Image, ImageOps
 from torchvision import transforms
@@ -10,7 +12,7 @@ TRAIN_PATH = '/seg_train/seg_train/'
 VALID_PATH = '/seg_dev/seg_dev/'
 TEST_PATH = '/seg_test/'
 VGG19_PATH = 'vgg19_features/'
-SUBSET_DIR_NAMES = ['buildings', 'forest', 'glacier', 'mountain', 'sea', 'street']
+CLASS_NAMES = ['buildings', 'forest', 'glacier', 'mountain', 'sea', 'street']
 RANDOM_SEED = 42
 NEW_IMG_SIZE = (30, 30)
 
@@ -27,13 +29,12 @@ class DataLoader:
             gray_img = ImageOps.grayscale(resized_img)  # convert image to grayscale
             flatten = np.asarray(gray_img).flatten()  # flatten the matrix
             return flatten / 255.
-            # TODO
             # return (flatten - min(flatten)) / (max(flatten) - min(flatten))
 
     def load_labeled_data(self, path, data):
         X, y = [], []
-        for i in range(len(SUBSET_DIR_NAMES)):
-            cur_path = self.opt.data_path + path + SUBSET_DIR_NAMES[i]
+        for i in range(len(CLASS_NAMES)):
+            cur_path = self.opt.data_path + path + CLASS_NAMES[i]
             for img_name in sorted(os.listdir(cur_path)):
                 img = Image.open(cur_path + '/' + img_name)
                 X.append(self.process_img(img, data))
@@ -65,13 +66,20 @@ class DataLoader:
 
         if self.opt.vgg19:
             self.get_vgg_features('test')
-        self.X_test = []
+        self.X_test, self.y_test = [], []
 
-        cur_path = self.opt.data_path + TEST_PATH
-        for img_name in sorted(os.listdir(cur_path)):
+        cur_path = self.opt.data_path + TEST_PATH  # TODO
+        img_paths = os.listdir(cur_path)
+        img_paths.sort(key=lambda f: int(re.sub('\D', '', f)))
+        csv_reader = csv.reader(open(self.opt.test_label_path), delimiter=';')
+        next(csv_reader)  # discard header
+
+        for img_name, label_row in zip(img_paths, csv_reader):
             img = Image.open(cur_path + '/' + img_name)
             self.X_test.append(self.process_img(img, 'test'))
+            self.y_test.append(int(label_row[1]))
         self.X_test = np.asarray(self.X_test)
+        self.y_test = np.asarray(self.y_test)
 
         if self.opt.vgg19:
             self.save_vgg_features('test')
