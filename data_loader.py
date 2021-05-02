@@ -10,7 +10,7 @@ from torchvision.models import vgg19
 
 TRAIN_PATH = '/seg_train/seg_train/'
 VALID_PATH = '/seg_dev/seg_dev/'
-TEST_PATH = '/seg_test/'
+# TEST_PATH = '/seg_test/'
 VGG19_PATH = 'vgg19_features/'
 CLASS_NAMES = ['buildings', 'forest', 'glacier', 'mountain', 'sea', 'street']
 RANDOM_SEED = 42
@@ -68,7 +68,7 @@ class DataLoader:
             self.get_vgg_features('test')
         self.X_test, self.y_test = [], []
 
-        cur_path = self.opt.data_path + TEST_PATH  # TODO
+        cur_path = self.opt.data_path
         img_paths = os.listdir(cur_path)
         img_paths.sort(key=lambda f: int(re.sub('\D', '', f)))
         csv_reader = csv.reader(open(self.opt.test_label_path), delimiter=';')

@@ -8,17 +8,18 @@ class Options:
 
         # train
         parser.add_argument('-model_name', type=str, default='model.txt', help='name of the model to save')
-        parser.add_argument('-hidden_layer_num', type=int, default=1, help='number of hidden layers')
-        parser.add_argument('-hidden_unit_num', type=int, default=300, help='number of hidden units in hidden layers')
+        parser.add_argument('-hidden_layer_num', type=int, default=2, help='number of hidden layers')
+        parser.add_argument('-hidden_unit_num', type=int, default=500, help='number of hidden units in hidden layers')
         parser.add_argument('-epoch_num', type=int, default=50, help='number of epochs')
-        parser.add_argument('-batch_size', type=int, default=32, help='batch size for mini-batch gradient descent')
+        parser.add_argument('-batch_size', type=int, default=64, help='batch size for mini-batch gradient descent')
         parser.add_argument('-learning_rate', type=float, default=0.1, help='learning rate for gradient descent')
         parser.add_argument('-reduce_lr', action='store_true', help='if specified, reduce learning rate')
         parser.add_argument('-activation_func', type=str, default='relu', help='sigmoid | tanh | relu')
         parser.add_argument('-objective_func', type=str, default='log', help='log | sse | mse')
 
         # test
-        parser.add_argument('-model_path', type=str, default='./model/sl_nn_', help='path to saved model')
+        parser.add_argument('-model_path', type=str, default='./model/30x30_best.pkl', help='path to saved model')
+        parser.add_argument('-test_label_path', type=str, default='./data/test_label.csv', help='path to test labels')
 
         self.parser = parser
         return parser

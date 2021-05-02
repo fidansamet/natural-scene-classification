@@ -17,17 +17,18 @@ class NeuralNetwork:
             self.error_func = error_func
             self.lr = lr
             self.output_size = output_size
-            self.init_weights(input_size, hidden_sizes, output_size)
+            self.init_weights(input_size, hidden_sizes, output_size)  # initialize random weights
 
     def init_weights(self, input_size, hidden_sizes, output_size):
-        # get all dimensions in the network
+        # get all layer sizes in the network
         layer_sizes = np.concatenate((input_size, hidden_sizes, output_size), axis=None).astype(int)
 
         for i in range(self.layer_num):
-            stdv = 1. / math.sqrt(layer_sizes[i])
-            self.net['w_' + str(i + 1)] = np.random.uniform(-stdv, stdv, (layer_sizes[i], layer_sizes[i + 1])).astype(
+            std = 1. / math.sqrt(layer_sizes[i])
+            # use float32 to avoid overflow in the upcoming calculations
+            self.net['w_' + str(i + 1)] = np.random.uniform(-std, std, (layer_sizes[i], layer_sizes[i + 1])).astype(
                 'float32')
-            self.net['b_' + str(i + 1)] = np.random.uniform(-stdv, stdv, layer_sizes[i + 1]).astype('float32')
+            self.net['b_' + str(i + 1)] = np.random.uniform(-std, std, layer_sizes[i + 1]).astype('float32')
 
     # Activation functions - Start
     def sigmoid(self, z):
@@ -40,7 +41,7 @@ class NeuralNetwork:
     def relu(self, z):
         return np.maximum(0, z).astype('float32')
 
-    # Activation functions and derivatives - End
+    # Activation functions - End
 
     # Activation functions derivatives - Start
     def d_sigmoid(self, a):
@@ -55,60 +56,53 @@ class NeuralNetwork:
     # Activation functions derivatives - End
 
     def softmax(self, z):
-        shifted = z - np.max(z, axis=1, keepdims=True)
-        z = np.sum(np.exp(shifted), axis=1, keepdims=True)
-        log_probs = shifted - np.log(z)
+        shift_z = z - np.max(z, axis=1, keepdims=True)  # shift for stable softmax
+        exp_z = np.sum(np.exp(shift_z), axis=1, keepdims=True)
+        log_probs = shift_z - np.log(exp_z)
         probs = np.exp(log_probs)
         return log_probs, probs
 
     # Error functions - Start
-    def sum_neg_log_likelihood(self, z, y):
-        log_probs, probs = self.softmax(z)
-        n = z.shape[0]
+    def sum_neg_log_likelihood(self, y, probs, log_probs, n):
         loss = -np.sum(log_probs[np.arange(n), y]) / n
         d_x = probs.copy()
-        d_x[np.arange(n), y] -= 1
-        d_x /= n
+        d_x[np.arange(n), y] = d_x[np.arange(n), y] - 1
+        d_x = d_x / n
         return loss, d_x
 
-    def mean_squared_err(self, z, y):
-        _, probs = self.softmax(z)
-        n = z.shape[0]
-        one_hot_y = np.zeros((n, self.output_size), dtype='float32')
-        one_hot_y[np.arange(n), y] = 1.
-        loss = np.sum(np.power(one_hot_y - probs, 2)) / n
-        d_x = -2 * (one_hot_y - probs) / n
-        return loss, d_x
-
-    def sum_squared_err(self, z, y):
-        _, probs = self.softmax(z)
-        n = z.shape[0]
+    def sum_squared_err(self, y, probs, n):
         one_hot_y = np.zeros((n, self.output_size), dtype='float32')
         one_hot_y[np.arange(n), y] = 1.
         loss = np.sum(np.power(one_hot_y - probs, 2))
         d_x = -2 * (one_hot_y - probs)
         return loss, d_x
 
+    def mean_squared_err(self, y, probs, n):
+        one_hot_y = np.zeros((n, self.output_size), dtype='float32')
+        one_hot_y[np.arange(n), y] = 1.
+        loss = np.sum(np.power(one_hot_y - probs, 2)) / n
+        d_x = -2 * (one_hot_y - probs) / n
+        return loss, d_x
+
     # Error functions - End
 
     # Forward - Start
-    def forward_pass(self, X, valid=False):
+    def forward_pass(self, X):
         inputs = X
-        self.caches = []
+        self.layer_history = []  # keep forward pass information for backward pass
 
-        for i in range(self.layer_num - 1):
-            inputs, cache = self.activated_forward(inputs, self.net['w_' + str(i + 1)], self.net['b_' + str(i + 1)])
-            self.caches.append(cache)
+        for i in range(self.layer_num - 1):  # apply forward pass and activation for each layer except last one
+            inputs, history = self.activated_forward(inputs, self.net['w_' + str(i + 1)], self.net['b_' + str(i + 1)])
+            self.layer_history.append(history)
 
-        scores, cache = self.forward(inputs, self.net['w_' + str(self.layer_num)], self.net['b_' + str(self.layer_num)])
-        if not valid:
-            self.caches.append(cache)
+        scores, history = self.forward(inputs, self.net['w_' + str(self.layer_num)],
+                                       self.net['b_' + str(self.layer_num)])
+        self.layer_history.append(history)
         return scores
 
     def forward(self, x, w, b):
-        z = x.reshape(x.shape[0], -1).dot(w) + b
-        cache = (x, w, b)
-        return z, cache
+        z = x.reshape(x.shape[0], -1).dot(w) + b  # linear formula computation
+        return z, (x, w, b)
 
     def activate(self, z):
         if self.activation_func == 'sigmoid':
@@ -120,35 +114,41 @@ class NeuralNetwork:
         return activated
 
     def activated_forward(self, x, w, b):
-        z, fwd_cache = self.forward(x, w, b)
+        z, fwd_history = self.forward(x, w, b)
         activated = self.activate(z)
-        return activated, (fwd_cache, z, activated)
+        return activated, (fwd_history, z, activated)
 
     # Forward - End
 
     # Backward - Start
     def backward_pass(self, scores, y):
         gradients = {}
-        if self.error_func == 'log':
-            loss, d_o = self.sum_neg_log_likelihood(scores, y)
-        elif self.error_func == 'sse':
-            loss, d_o = self.sum_squared_err(scores, y)
-        elif self.error_func == 'mse':
-            loss, d_o = self.mean_squared_err(scores, y)
+        log_probs, probs = self.softmax(scores)
+        n = scores.shape[0]
 
-        d_o, d_w, d_b = self.backward(d_o, self.caches.pop())
+        # get loss and derivative of error wrt output
+        if self.error_func == 'log':
+            loss, d_o = self.sum_neg_log_likelihood(y, probs, log_probs, n)
+        elif self.error_func == 'sse':
+            loss, d_o = self.sum_squared_err(y, probs, n)
+        elif self.error_func == 'mse':
+            loss, d_o = self.mean_squared_err(y, probs, n)
+
+        # apply backward pass to compute gradients
+        d_o, d_w, d_b = self.backward(d_o, self.layer_history.pop())
         gradients['w_' + str(self.layer_num)] = d_w
         gradients['b_' + str(self.layer_num)] = d_b
 
         for i in range(self.layer_num - 2, -1, -1):
-            d_o, d_w, d_b = self.activated_backward(d_o, self.caches.pop())
+            d_o, d_w, d_b = self.activated_backward(d_o, self.layer_history.pop())
             gradients['w_' + str(i + 1)] = d_w
             gradients['b_' + str(i + 1)] = d_b
 
         return loss, gradients
 
-    def backward(self, d_o, cache):
-        x, w, b = cache
+    def backward(self, d_o, history):
+        x, w, b = history
+        # compute gradients of input, weight and bias
         d_x = d_o.dot(w.T).reshape(x.shape)
         d_w = x.reshape(x.shape[0], -1).T.dot(d_o)
         d_b = np.sum(d_o, axis=0)
@@ -161,20 +161,20 @@ class NeuralNetwork:
             d_x = self.d_tanh(a)
         elif self.activation_func == 'relu':
             d_x = self.d_relu(z)
-        return d_x * d_o
+        return d_x * d_o  # apply chain rule
 
-    def activated_backward(self, d_o, cache):
-        fwd_cache, z_cache, a_cache = cache
-        d_a = self.d_activate(d_o, z_cache, a_cache)
-        return self.backward(d_a, fwd_cache)
+    def activated_backward(self, d_o, history):
+        fwd_history, z_history, a_history = history
+        d_a = self.d_activate(d_o, z_history, a_history)
+        return self.backward(d_a, fwd_history)
 
     def update_weights(self, gradients):
-        for param, w in self.net.items():
-            updated_w = self.sgd(w, gradients[param])
+        for param, w in self.net.items():  # update each parameter in the network
+            updated_w = self.gradient_descent(w, gradients[param])
             self.net[param] = updated_w
 
-    def sgd(self, w, d_w):
-        w -= self.lr * d_w
+    def gradient_descent(self, w, d_w):
+        w = w - self.lr * d_w  # apply gradient descent to update the weights
         return w
 
     # Backward - End
@@ -185,7 +185,8 @@ class NeuralNetwork:
         return loss, gradients
 
     def predict(self, X):
-        return self.forward_pass(X, valid=True)
+        scores = self.forward_pass(X)
+        return np.argmax(scores, axis=1)  # predict the label with max score
 
     def extract_model(self):
         name = '%dnn_lr=%0.3f_err=%s_act=%s_vgg.pkl' % (self.layer_num, self.lr, self.error_func, self.activation_func)
